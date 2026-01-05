@@ -134,7 +134,11 @@ class DisplayRenderer:
         click.echo(click.style(BANNER, fg='cyan', bold=True))
         click.echo(click.style("KHAO2 IMAGE FORENSICS | Every little bit.\n", fg='cyan'))
 
-        click.echo(click.style("ANALYSIS IN PROGRESS - DO NOT TOUCH", fg='yellow', bold=True))
+        # Show different header for queued status
+        if result.status == 'queued':
+            click.echo(click.style("SCAN QUEUED - WAITING FOR PROCESSING", fg='yellow', bold=True))
+        else:
+            click.echo(click.style("ANALYSIS IN PROGRESS - DO NOT TOUCH", fg='yellow', bold=True))
         click.echo(click.style("━" * 62, fg='blue'))
         click.echo()
 
@@ -148,23 +152,36 @@ class DisplayRenderer:
         click.echo(f"SUBMITTED: {result.metadata.submittedat}")
         click.echo()
 
-        click.echo(click.style("PROGRESS", fg='cyan', bold=True))
-        click.echo(f"├─ Completed: {click.style(str(result.completed_engines), fg='green')}/{remaining} engines")
-        click.echo(f"├─ Failed: {click.style(str(result.failed_engines), fg='red' if result.failed_engines > 0 else 'white')} engines")
-        click.echo(f"├─ Elapsed Time: {result.elapsed_time}ms ({format_time(result.elapsed_time)})")
-        click.echo(f"└─ Used FLOPs: {result.used_flops} ({format_number(result.used_flops)})")
-        click.echo()
-
-        if percentage < 30:
-            bar_color = 'red'
-        elif percentage < 70:
-            bar_color = 'yellow'
+        # Show queue information when status is "queued"
+        if result.status == 'queued':
+            click.echo(click.style("QUEUE STATUS", fg='cyan', bold=True))
+            if result.queue_depth is not None:
+                click.echo(f"├─ Position in Queue: {click.style(str(result.queue_depth), fg='yellow')}")
+            if result.queued_at:
+                click.echo(f"├─ Queued At: {result.queued_at}")
+            if result.queue_time is not None:
+                queue_time_sec = result.queue_time / 1000
+                click.echo(f"└─ Estimated Wait: {click.style(f'{queue_time_sec:.1f}s', fg='yellow')}")
+            click.echo()
         else:
-            bar_color = 'green'
+            click.echo(click.style("PROGRESS", fg='cyan', bold=True))
+            click.echo(f"├─ Completed: {click.style(str(result.completed_engines), fg='green')}/{remaining} engines")
+            click.echo(f"├─ Failed: {click.style(str(result.failed_engines), fg='red' if result.failed_engines > 0 else 'white')} engines")
+            click.echo(f"├─ Elapsed Time: {result.elapsed_time}ms ({format_time(result.elapsed_time)})")
+            click.echo(f"└─ Used FLOPs: {result.used_flops} ({format_number(result.used_flops)})")
+            click.echo()
 
-        click.echo(click.style(f"ENGINE STATUS: ", fg='white', bold=True) +
-                   click.style(f"[{progress_bar}]", fg=bar_color) +
-                   click.style(f" {percentage}%", fg=bar_color, bold=True))
+            if percentage < 30:
+                bar_color = 'red'
+            elif percentage < 70:
+                bar_color = 'yellow'
+            else:
+                bar_color = 'green'
+
+            click.echo(click.style(f"ENGINE STATUS: ", fg='white', bold=True) +
+                       click.style(f"[{progress_bar}]", fg=bar_color) +
+                       click.style(f" {percentage}%", fg=bar_color, bold=True))
+
         click.echo(click.style("━" * 62, fg='blue'))
         click.echo()
         

@@ -1,7 +1,7 @@
 """Output formatting for CLI commands with JSON and human-readable support."""
 import json
 from khao2.core.models import (
-    QuotaInfo, ScanList, UsageData, AuditLogs, ScanResult
+    QuotaInfo, ScanList, UsageData, AuditLogs, ScanResult, QueueStatus
 )
 from khao2.utils.formatters import format_number
 
@@ -39,6 +39,31 @@ class OutputFormatter:
             f"Used: {quota.used}",
             f"Remaining: {quota.remaining}",
             f"Period End: {quota.period_end}",
+            "━" * 40,
+        ]
+        return "\n".join(lines)
+
+    def format_queue_status(self, queue_status: QueueStatus) -> str:
+        """
+        Format queue status information for display.
+        
+        Args:
+            queue_status: QueueStatus object containing queue data.
+            
+        Returns:
+            Formatted string (JSON or human-readable).
+        """
+        if self.json_mode:
+            return json.dumps({
+                'queued': queue_status.queued,
+                'processing': queue_status.processing
+            }, indent=2)
+        
+        lines = [
+            "QUEUE STATUS",
+            "━" * 40,
+            f"Queued: {queue_status.queued}",
+            f"Processing: {queue_status.processing}",
             "━" * 40,
         ]
         return "\n".join(lines)
@@ -177,6 +202,15 @@ class OutputFormatter:
             'usedFlops': result.used_flops,
         }
         
+        # Include queue fields when status is "queued"
+        if result.status == 'queued':
+            if result.queue_depth is not None:
+                data['queueDepth'] = result.queue_depth
+            if result.queued_at:
+                data['queuedAt'] = result.queued_at
+            if result.queue_time is not None:
+                data['queueTime'] = result.queue_time
+        
         if result.file_name:
             data['fileName'] = result.file_name
         
@@ -250,12 +284,25 @@ class OutputFormatter:
             f"Scan Type: {result.metadata.scantype}",
             f"Submitted: {result.metadata.submittedat}",
             "",
-            "PROGRESS",
-            f"├─ Engines Completed: {result.completed_engines}/{result.total_engines}",
-            f"├─ Engines Failed: {result.failed_engines}",
-            f"└─ Elapsed Time: {result.elapsed_time}ms",
-            "━" * 62,
         ]
+        
+        # Show queue information when status is "queued"
+        if result.status == 'queued':
+            lines.append("QUEUE STATUS")
+            if result.queue_depth is not None:
+                lines.append(f"├─ Position in Queue: {result.queue_depth}")
+            if result.queued_at:
+                lines.append(f"├─ Queued At: {result.queued_at}")
+            if result.queue_time is not None:
+                queue_time_sec = result.queue_time / 1000
+                lines.append(f"└─ Estimated Wait: {queue_time_sec:.1f}s")
+        else:
+            lines.append("PROGRESS")
+            lines.append(f"├─ Engines Completed: {result.completed_engines}/{result.total_engines}")
+            lines.append(f"├─ Engines Failed: {result.failed_engines}")
+            lines.append(f"└─ Elapsed Time: {result.elapsed_time}ms")
+        
+        lines.append("━" * 62)
         return lines
 
     def _format_completed_scan(self, result: ScanResult) -> list:

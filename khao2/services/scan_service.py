@@ -1,8 +1,8 @@
 """Service for managing scan operations."""
 import time
-from typing import Callable, Optional
+from typing import Callable, Optional, Tuple
 from khao2.services.api_client import APIClient
-from khao2.core.models import ScanResult, ScanList
+from khao2.core.models import ScanResult, ScanList, QueueStatus
 from khao2.core.exceptions import APIError
 
 
@@ -12,15 +12,26 @@ class ScanService:
     def __init__(self, api_client: APIClient):
         self.api_client = api_client
 
-    def upload_and_scan(self, image_path: str) -> str:
-        """Upload an image and return the scan ID."""
+    def upload_and_scan(self, image_path: str) -> Tuple[str, Optional[int]]:
+        """
+        Upload an image and return the scan ID and queue position.
+        
+        Returns:
+            Tuple of (scan_id, queue_position) where queue_position is None if not queued
+        """
         result = self.api_client.upload_image(image_path)
-        return result.get('id')
+        scan_id = result.get('id')
+        queue_position = result.get('position')  # New field from 202 response
+        return scan_id, queue_position
 
     def get_scan_result(self, scan_id: str) -> ScanResult:
         """Get scan result by ID."""
         data = self.api_client.get_scan_status(scan_id)
         return ScanResult.from_api_response(data)
+
+    def get_queue_status(self) -> QueueStatus:
+        """Get global queue status."""
+        return self.api_client.get_queue_status()
 
     def poll_scan_status(
         self,
@@ -40,6 +51,9 @@ class ScanService:
             
         Returns:
             Final ScanResult or None if interrupted
+            
+        Status flow: queued → pending → running → classifying → completed
+                                                              ↘ errored
         """
         while True:
             try:

@@ -59,6 +59,21 @@ class StaticAI:
 
 
 @dataclass
+class QueueStatus:
+    """Global queue status information."""
+    queued: int
+    processing: int
+
+    @classmethod
+    def from_api_response(cls, data: dict) -> 'QueueStatus':
+        """Create QueueStatus from API response."""
+        return cls(
+            queued=data.get('queued', 0),
+            processing=data.get('processing', 0)
+        )
+
+
+@dataclass
 class ScanResult:
     status: str
     metadata: ScanMetadata
@@ -74,6 +89,10 @@ class ScanResult:
     firm_scan: Optional[Dict[str, Any]] = None
     found_strings: Optional[Dict[str, Any]] = None
     static_bounce: Optional[Dict[str, Any]] = None
+    # Queue-related fields (when status is "queued")
+    queue_depth: Optional[int] = None
+    queued_at: Optional[str] = None
+    queue_time: Optional[int] = None
 
     @classmethod
     def from_api_response(cls, data: dict) -> 'ScanResult':
@@ -155,7 +174,10 @@ class ScanResult:
             static_ai=static_ai,
             firm_scan=data.get('firmScan'),
             found_strings=data.get('foundStrings'),
-            static_bounce=data.get('staticBounce')
+            static_bounce=data.get('staticBounce'),
+            queue_depth=data.get('queueDepth'),
+            queued_at=data.get('queuedAt'),
+            queue_time=data.get('queueTime')
         )
 
 

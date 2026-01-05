@@ -69,6 +69,10 @@ COMMAND_EXAMPLES = {
         ('k2 quota', 'Check remaining credits'),
         ('k2 quota --json', 'Get quota as JSON'),
     ],
+    'queue': [
+        ('k2 queue', 'Check current queue status'),
+        ('k2 queue --json', 'Get queue status as JSON'),
+    ],
     'usage': [
         ('k2 usage', 'Show current month usage'),
         ('k2 usage --start 2024-01-01', 'Show usage from date'),
@@ -420,7 +424,11 @@ def dig(image_path, watch, debug, json_output, skip_quota_check):
             if message:  # Warning message for low credits
                 click.echo(click.style(message, fg='yellow'), err=True)
 
-        scan_id = scan_service.upload_and_scan(image_path)
+        scan_id, queue_position = scan_service.upload_and_scan(image_path)
+
+        # Show queue position feedback if scan was queued
+        if queue_position is not None and not json_output:
+            click.echo(click.style(f"Scan queued at position {queue_position}", fg='yellow'))
 
         if watch:
             # Use enhanced polling with keybinds and animation
@@ -629,6 +637,28 @@ def quota(json_output):
 
         quota_info = quota_service.get_quota()
         click.echo(formatter.format_quota(quota_info))
+    except Khao2Error as e:
+        click.echo(f"Error: {str(e)}", err=True)
+        sys.exit(1)
+
+
+@cli.command(cls=CustomCommand)
+@click.option('--json', 'json_output', is_flag=True, help='Output in JSON format')
+def queue(json_output):
+    """Display current queue status."""
+    config_manager = ConfigManager()
+    config = config_manager.load()
+
+    if not json_output:
+        print_banner()
+
+    try:
+        api_client = APIClient(config['endpoint'], config['token'])
+        scan_service = ScanService(api_client)
+        formatter = OutputFormatter(json_mode=json_output)
+
+        queue_status = scan_service.get_queue_status()
+        click.echo(formatter.format_queue_status(queue_status))
     except Khao2Error as e:
         click.echo(f"Error: {str(e)}", err=True)
         sys.exit(1)

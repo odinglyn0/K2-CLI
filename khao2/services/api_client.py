@@ -8,7 +8,7 @@ from khao2.core.exceptions import (
     APIError, ConfigurationError, ValidationError,
     InsufficientCreditsError, UploadExpiredError
 )
-from khao2.core.models import QuotaInfo, ScanList, UsageData, AuditLogs
+from khao2.core.models import QuotaInfo, ScanList, UsageData, AuditLogs, QueueStatus
 
 
 def get_cli_version() -> str:
@@ -167,15 +167,20 @@ class APIClient:
             if response.status_code == 404:
                 raise APIError("File not found in S3. The upload may have failed.")
 
-            if response.status_code not in (200, 201):
+            # Accept both 201 (legacy) and 202 (queued) responses
+            if response.status_code not in (200, 201, 202):
                 raise APIError(f"Failed to initiate scan: {response.status_code} - {response.text}")
 
             data = response.json()
-            if data.get('m') != 'Ack':
+            # Accept both "Ack" (legacy) and "Queued" (new) messages
+            if data.get('m') not in ('Ack', 'Queued'):
                 raise APIError(f"Unexpected response from initiatescan: {data}")
 
             if self.debug:
-                print(f"[DEBUG] Scan initiated successfully")
+                if data.get('m') == 'Queued':
+                    print(f"[DEBUG] Scan queued at position: {data.get('position', 'unknown')}")
+                else:
+                    print(f"[DEBUG] Scan initiated successfully")
 
             return data
         except requests.RequestException as e:
@@ -472,3 +477,32 @@ class APIClient:
             return AuditLogs.from_api_response(response.json())
         except requests.RequestException as e:
             raise APIError(f"Network error while fetching audit logs: {str(e)}")
+
+    def get_queue_status(self) -> QueueStatus:
+        """
+        GET /queue/status - Get current queue state.
+        
+        Returns:
+            QueueStatus with queued and processing counts
+        """
+        base_url = self._get_base_url()
+        url = f"{base_url}/queue/status"
+
+        if self.debug:
+            print(f"[DEBUG] Queue status endpoint: {url}")
+
+        try:
+            headers = {'apiKey': self.token, 'User-Agent': get_user_agent()}
+            response = requests.get(url, headers=headers)
+
+            if response.status_code == 401:
+                raise APIError("Invalid API key. Please verify your token.")
+
+            if response.status_code != 200:
+                raise APIError(
+                    f"Failed to get queue status: {response.status_code} - {response.text}"
+                )
+
+            return QueueStatus.from_api_response(response.json())
+        except requests.RequestException as e:
+            raise APIError(f"Network error while fetching queue status: {str(e)}")
