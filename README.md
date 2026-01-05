@@ -10,7 +10,7 @@
 
 **Every single bit.**
 
-Easy to use, infromative and comprehensive steganalysis suite.
+Easy to use, informative and comprehensive steganalysis suite.
 
 This is a CLI tool for my SaaS sidehustle (khao2.com) for steganalysis.
 
@@ -36,6 +36,8 @@ Configure API endpoint:
 k2 endpoint set https://api.khao2.com
 ```
 
+### Basic Commands
+
 Analyze an image:
 ```bash
 k2 dig image.png
@@ -50,6 +52,93 @@ Get scan results by ID:
 ```bash
 k2 get <scan-id>
 ```
+
+### Batch Processing
+
+Process multiple images:
+```bash
+k2 batch image1.png image2.jpg image3.gif
+```
+
+Recursively scan directories:
+```bash
+k2 batch /path/to/images --recursive
+```
+
+Custom file patterns:
+```bash
+k2 batch /path/to/files --pattern "*.png" --recursive
+```
+
+### Plugin Management
+
+List available plugins:
+```bash
+k2 plugins list
+```
+
+Load a plugin:
+```bash
+k2 plugins load batch_processor
+```
+
+### Reporting
+
+Generate HTML dashboard report:
+```bash
+k2 report dashboard.html
+```
+
+Generate executive summary (last 7 days):
+```bash
+k2 report executive_summary.html --executive --days 7
+```
+
+Export as PDF:
+```bash
+k2 report analysis.pdf --format pdf
+```
+
+### Advanced Features
+
+List recent scans:
+```bash
+k2 list --limit 10
+```
+
+Check quota:
+```bash
+k2 quota
+```
+
+View usage analytics:
+```bash
+k2 usage
+```
+
+## Plugin Architecture
+
+Khao2 features a powerful plugin system that enables extensibility and advanced functionality:
+
+### Built-in Plugins
+
+- **Batch Processor**: Intelligent batch processing with concurrency control and smart routing
+- **Enterprise Collaboration**: Team workspaces, workflow automation, and audit trails
+- **Hybrid Processing**: Cloud-local analysis with caching and cost optimization
+- **Advanced Intelligence**: Pattern recognition and continuous learning from scan results
+- **Reporting & Visualization**: Comprehensive dashboards and export capabilities
+
+### Plugin Types
+
+- **Detector Plugins**: Custom steganography detection algorithms
+- **Processor Plugins**: Batch processing and automation workflows
+- **Exporter Plugins**: Custom report formats and integrations
+- **Analyzer Plugins**: Advanced analysis and intelligence features
+- **Integration Plugins**: Third-party service integrations
+
+### Developing Custom Plugins
+
+Create a plugin by implementing the appropriate protocol and placing it in the plugins directory. See the built-in plugins for examples.
 
 ## Info
 This is a personal project turned SaaS side hustle, I originally built this for my own CTF challenges with no intention of making it a product.

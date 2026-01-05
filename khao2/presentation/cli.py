@@ -12,6 +12,7 @@ from khao2.presentation.display import DisplayRenderer, LoadingAnimation
 from khao2.presentation.output_formatter import OutputFormatter
 from khao2.presentation.keybinds import KeybindHandler
 from khao2.core.exceptions import Khao2Error, APIError
+from khao2.plugins import PluginManager, PluginContext
 
 BANNER = """
 ██╗  ██╗    ██████╗ 
@@ -77,6 +78,20 @@ COMMAND_EXAMPLES = {
         ('k2 audit', 'Show audit logs'),
         ('k2 audit --limit 20', 'Show last 20 audit entries'),
     ],
+    'batch': [
+        ('k2 batch image1.png image2.jpg', 'Process multiple images'),
+        ('k2 batch ./images --recursive', 'Scan directory recursively'),
+        ('k2 batch ./files --pattern "*.png"', 'Custom file pattern'),
+    ],
+    'report': [
+        ('k2 report dashboard.html', 'Generate HTML dashboard'),
+        ('k2 report analysis.pdf --format pdf', 'Export as PDF'),
+        ('k2 report summary.html --executive', 'Executive summary report'),
+    ],
+    'plugins': [
+        ('k2 plugins list', 'List available plugins'),
+        ('k2 plugins load batch_processor', 'Load a plugin'),
+    ],
     'token': [
         ('k2 token set <token>', 'Set API token'),
     ],
@@ -110,9 +125,11 @@ class CustomGroup(click.Group):
         formatter.write("Examples:\n")
         examples = [
             ('k2 dig ./image.png --watch', 'Scan image and watch progress'),
+            ('k2 batch ./images --recursive', 'Batch process directory'),
+            ('k2 report dashboard.html', 'Generate analysis report'),
+            ('k2 plugins list', 'List available plugins'),
             ('k2 list --limit 10', 'List last 10 scans'),
             ('k2 quota', 'Check remaining credits'),
-            ('k2 get <scan_id> --json', 'Get results as JSON'),
         ]
         for cmd, desc in examples:
             formatter.write(f"  {cmd:<30} {desc}\n")
@@ -256,6 +273,118 @@ def set_endpoint(endpoint_url):
         sys.exit(1)
 
 
+@cli.group()
+def plugins():
+    """Manage plugins."""
+    pass
+
+
+@plugins.command('list')
+@click.option('--available', is_flag=True, help='List available plugins')
+@click.option('--loaded', is_flag=True, help='List loaded plugins')
+def list_plugins(available, loaded):
+    """List plugins."""
+    try:
+        config_manager = ConfigManager()
+        config = config_manager.load()
+
+        api_client = APIClient(config['endpoint'], config['token'])
+        scan_service = ScanService(api_client)
+        quota_service = QuotaService(api_client)
+        account_service = AccountService(api_client)
+
+        plugin_manager = PluginManager()
+        plugin_context = PluginContext(
+            config=config,
+            services={
+                'api_client': api_client,
+                'scan_service': scan_service,
+                'quota_service': quota_service,
+                'account_service': account_service,
+            }
+        )
+
+        if available or not loaded:
+            print_banner()
+            click.echo("Available Plugins:")
+            click.echo("━" * 50)
+
+            available_plugins = plugin_manager.discover_plugins()
+            if available_plugins:
+                for name, metadata in available_plugins.items():
+                    click.echo(f"  {name:<20} {metadata.description}")
+                    click.echo(f"    Type: {metadata.plugin_type}, Version: {metadata.version}")
+                    click.echo()
+            else:
+                click.echo("  No plugins found.")
+        else:
+            print_banner()
+            click.echo("Loaded Plugins:")
+            click.echo("━" * 50)
+
+            loaded_plugins = plugin_manager.list_loaded_plugins()
+            if loaded_plugins:
+                for name in loaded_plugins:
+                    click.echo(f"  {name}")
+            else:
+                click.echo("  No plugins loaded.")
+
+    except Khao2Error as e:
+        print_banner()
+        click.echo(f"Error: {str(e)}", err=True)
+        sys.exit(1)
+
+
+@plugins.command('load')
+@click.argument('plugin_name')
+def load_plugin(plugin_name):
+    """Load a plugin."""
+    try:
+        config_manager = ConfigManager()
+        config = config_manager.load()
+
+        api_client = APIClient(config['endpoint'], config['token'])
+        scan_service = ScanService(api_client)
+        quota_service = QuotaService(api_client)
+        account_service = AccountService(api_client)
+
+        plugin_manager = PluginManager()
+        plugin_context = PluginContext(
+            config=config,
+            services={
+                'api_client': api_client,
+                'scan_service': scan_service,
+                'quota_service': quota_service,
+                'account_service': account_service,
+            }
+        )
+
+        plugin = plugin_manager.load_plugin(plugin_name, plugin_context)
+        print_banner()
+        click.echo(f"Plugin '{plugin_name}' loaded successfully.")
+        click.echo(f"Description: {plugin.metadata.description}")
+
+    except Khao2Error as e:
+        print_banner()
+        click.echo(f"Error: {str(e)}", err=True)
+        sys.exit(1)
+
+
+@plugins.command('unload')
+@click.argument('plugin_name')
+def unload_plugin(plugin_name):
+    """Unload a plugin."""
+    try:
+        plugin_manager = PluginManager()
+        plugin_manager.unload_plugin(plugin_name)
+        print_banner()
+        click.echo(f"Plugin '{plugin_name}' unloaded successfully.")
+    except Khao2Error as e:
+        print_banner()
+        click.echo(f"Error: {str(e)}", err=True)
+        sys.exit(1)
+
+
 @cli.command(cls=CustomCommand)
 @click.argument('image_path')
 @click.option('--watch', is_flag=True, help='Watch scan progress in real-time')
@@ -311,6 +440,122 @@ def dig(image_path, watch, debug, json_output, skip_quota_check):
                 click.echo(formatter.format_scan_result(result))
             else:
                 display_renderer.display_headless_submission(result)
+    except Khao2Error as e:
+        click.echo(f"Error: {str(e)}", err=True)
+        sys.exit(1)
+
+
+@cli.command(cls=CustomCommand)
+@click.argument('paths', nargs=-1, required=True)
+@click.option('--recursive', '-r', is_flag=True, help='Recursively scan directories')
+@click.option('--pattern', default='*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.webp', help='File pattern to match')
+@click.option('--json', 'json_output', is_flag=True, help='Output results in JSON format')
+@click.option('--output', '-o', 'output_file', help='Save results to file')
+def batch(paths, recursive, pattern, json_output, output_file):
+    """Process multiple images in batch."""
+    from pathlib import Path
+    from khao2.plugins import PluginManager, PluginContext
+
+    config_manager = ConfigManager()
+    config = config_manager.load()
+
+    if not json_output:
+        print_banner()
+
+    try:
+        api_client = APIClient(config['endpoint'], config['token'])
+        scan_service = ScanService(api_client)
+        quota_service = QuotaService(api_client)
+        account_service = AccountService(api_client)
+
+        plugin_manager = PluginManager()
+        plugin_context = PluginContext(
+            config=config,
+            services={
+                'api_client': api_client,
+                'scan_service': scan_service,
+                'quota_service': quota_service,
+                'account_service': account_service,
+            }
+        )
+
+        # Load batch processor plugin
+        batch_plugin = plugin_manager.load_plugin('batch_processor', plugin_context)
+
+        # Collect all files to process
+        import glob
+        all_files = []
+        for path_str in paths:
+            path = Path(path_str)
+            if path.is_file():
+                all_files.append(path)
+            elif path.is_dir():
+                if recursive:
+                    # Use glob for recursive matching
+                    pattern_parts = pattern.split(',')
+                    for part in pattern_parts:
+                        glob_pattern = f"**/{part.strip()}"
+                        all_files.extend(path.glob(glob_pattern))
+                else:
+                    # Non-recursive directory scan
+                    pattern_parts = pattern.split(',')
+                    for part in pattern_parts:
+                        glob_pattern = part.strip()
+                        all_files.extend(path.glob(glob_pattern))
+
+        if not all_files:
+            click.echo("No files found matching the specified pattern.", err=True)
+            sys.exit(1)
+
+        # Remove duplicates
+        all_files = list(set(all_files))
+
+        click.echo(f"Found {len(all_files)} files to process")
+
+        # Process batch
+        results = batch_plugin.process(all_files)
+
+        # Display results
+        successful = sum(1 for r in results if not r.get('error'))
+        failed = len(results) - successful
+
+        if json_output:
+            import json
+            output_data = {
+                "total_files": len(all_files),
+                "successful": successful,
+                "failed": failed,
+                "results": results
+            }
+            if output_file:
+                with open(output_file, 'w') as f:
+                    json.dump(output_data, f, indent=2)
+                click.echo(f"Results saved to {output_file}")
+            else:
+                click.echo(json.dumps(output_data, indent=2))
+        else:
+            click.echo(f"\nBatch processing complete:")
+            click.echo(f"  Total files: {len(all_files)}")
+            click.echo(f"  Successful: {successful}")
+            click.echo(f"  Failed: {failed}")
+
+            if failed > 0:
+                click.echo(f"\nFailed files:")
+                for result in results:
+                    if result.get('error'):
+                        click.echo(f"  - {result.get('item', 'unknown')}: {result['error']}")
+
+            if output_file:
+                import json
+                with open(output_file, 'w') as f:
+                    json.dump({
+                        "total_files": len(all_files),
+                        "successful": successful,
+                        "failed": failed,
+                        "results": results
+                    }, f, indent=2)
+                click.echo(f"\nDetailed results saved to {output_file}")
+
     except Khao2Error as e:
         click.echo(f"Error: {str(e)}", err=True)
         sys.exit(1)
@@ -408,6 +653,58 @@ def list_scans(limit, offset, json_output):
 
         scan_list = scan_service.list_scans(limit=min(limit, 100), offset=offset)
         click.echo(formatter.format_scan_list(scan_list))
+    except Khao2Error as e:
+        click.echo(f"Error: {str(e)}", err=True)
+        sys.exit(1)
+
+
+@cli.command(cls=CustomCommand)
+@click.argument('output_path', type=click.Path())
+@click.option('--format', 'output_format', default='html', type=click.Choice(['html', 'json', 'csv', 'pdf']), help='Output format')
+@click.option('--days', default=30, type=int, help='Number of days to include in report')
+@click.option('--template', default='default', help='Report template to use')
+@click.option('--executive', is_flag=True, help='Generate executive summary report')
+def report(output_path, output_format, days, template, executive):
+    """Generate comprehensive analysis reports."""
+    from pathlib import Path
+    from khao2.plugins import PluginManager, PluginContext
+
+    config_manager = ConfigManager()
+    config = config_manager.load()
+
+    print_banner()
+
+    try:
+        api_client = APIClient(config['endpoint'], config['token'])
+        scan_service = ScanService(api_client)
+        quota_service = QuotaService(api_client)
+        account_service = AccountService(api_client)
+
+        plugin_manager = PluginManager()
+        plugin_context = PluginContext(
+            config=config,
+            services={
+                'api_client': api_client,
+                'scan_service': scan_service,
+                'quota_service': quota_service,
+                'account_service': account_service,
+            }
+        )
+
+        # Load reporting plugin
+        reporting_plugin = plugin_manager.load_plugin('reporting_visualization', plugin_context)
+
+        # Generate report data
+        if executive:
+            report_data = reporting_plugin.generate_executive_report(days=days)
+        else:
+            report_data = reporting_plugin.generate_dashboard_data(days=days)
+
+        # Export report
+        reporting_plugin.export(report_data, Path(output_path), format=output_format, template=template)
+
+        click.echo(f"Report generated successfully: {output_path}")
+
     except Khao2Error as e:
         click.echo(f"Error: {str(e)}", err=True)
         sys.exit(1)
