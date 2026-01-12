@@ -14,6 +14,16 @@ Easy to use, informative and comprehensive steganalysis suite.
 
 This is a CLI tool for my SaaS sidehustle (khao2.com) for steganalysis.
 
+## FAQs
+### But what really is Khao2/K2?
+K2 is a versatile steganography detection platform designed for steganalysis on images.
+
+### Why is it different to something like Stegoveritas?
+K2 is different because it uses a broad spectrum of statistical and mathematical tests that check for small anomalies that highly sophisticated algorithms (e.g. J-UNIWARD, JMiPOD) leave behind, instead of looking for direct signatures it looks for anomalies/signals.
+
+### What is the ML part for?
+The ML part of K2 is used for aggregating all anomalies and outputting a binary verdict on how likely said image is to contain steganography.
+
 ## Installation
 
 ```bash
